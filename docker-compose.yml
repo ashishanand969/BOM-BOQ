@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: bom-boq-db
+    environment:
+      POSTGRES_DB: bom_boq
+      POSTGRES_USER: bom_user
+      POSTGRES_PASSWORD: bom_secure_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bom_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bom-boq-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bom-boq-api
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://bom_user:bom_secure_password@postgres:5432/bom_boq?schema=public
+      JWT_SECRET: your_super_secret_key_change_in_production
+      CORS_ORIGIN: http://localhost:3000
+      PORT: 5000
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backend/src:/app/src
+    networks:
+      - bom-boq-network
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: bom-boq-web
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:5000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - bom-boq-network
+
+volumes:
+  postgres_data:
+
+networks:
+  bom-boq-network:
+    driver: bridge
